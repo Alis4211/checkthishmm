@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Operator Console | Consent-Based Remote Support</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- Top App Navigation -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <span class="brand-title">RemoteAssist Pro</span>
+          <span class="brand-badge">Operator Console</span>
+        </div>
+      </div>
+      <div class="header-status">
+        <div id="sessionTimerBadge" class="timer-badge" style="display: none;">
+          ⏱️ <span id="sessionTimerText">--:--</span>
+        </div>
+        <div id="connectionStatusPill" class="status-pill waiting">
+          <span class="pulse-dot"></span>
+          <span id="connectionStatusText">No Active Session</span>
+        </div>
+        <button id="headerEndBtn" class="btn btn-danger btn-sm" style="display: none;">
+          End Session
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+
+    <!-- Session Creation Card (Visible when idle) -->
+    <section id="createSessionSection" class="card" style="max-width: 650px; margin: 2rem auto;">
+      <div class="card-header">
+        <h2 class="card-title">🚀 Create New Support Session</h2>
+      </div>
+      <p style="color: var(--text-muted); margin-bottom: 1.5rem; font-size: 0.95rem;">
+        Generate an ephemeral, single-use support link. The recipient will be required to explicitly review and grant permissions prior to any device interaction.
+      </p>
+
+      <form id="createSessionForm">
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;" for="operatorNameInput">
+            Operator Name / Organization
+          </label>
+          <input 
+            type="text" 
+            id="operatorNameInput" 
+            class="btn-block" 
+            style="padding: 0.65rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-main); font-size: 0.95rem;" 
+            value="Support Technician" 
+            required 
+            maxlength="80"
+          >
+        </div>
+
+        <div style="margin-bottom: 1.25rem;">
+          <label style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;" for="sessionPurposeInput">
+            Session Purpose / Customer Issue
+          </label>
+          <input 
+            type="text" 
+            id="sessionPurposeInput" 
+            class="btn-block" 
+            style="padding: 0.65rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-main); font-size: 0.95rem;" 
+            placeholder="e.g. Hardware diagnostic & router cable check" 
+            required 
+            maxlength="200"
+          >
+        </div>
+
+        <div style="margin-bottom: 1.5rem;">
+          <label style="display: block; font-weight: 600; margin-bottom: 0.4rem; font-size: 0.9rem;" for="durationSelect">
+            Session Validity Window
+          </label>
+          <select 
+            id="durationSelect" 
+            style="padding: 0.65rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-main); font-size: 0.95rem; width: 100%;"
+          >
+            <option value="15">15 Minutes</option>
+            <option value="30" selected>30 Minutes (Recommended)</option>
+            <option value="60">60 Minutes</option>
+          </select>
+        </div>
+
+        <button type="submit" id="submitCreateBtn" class="btn btn-primary btn-block">
+          ⚡ Generate Secure Session Link & QR Code
+        </button>
+      </form>
+    </section>
+
+    <!-- Active Session Dashboard (Visible once created) -->
+    <div id="activeDashboard" style="display: none;">
+      
+      <!-- Session Link & QR Code Banner -->
+      <section class="session-info-bar">
+        <div style="flex: 1; min-width: 280px;">
+          <div style="font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 0.35rem;">
+            Customer Invitation Link (Single-Use)
+          </div>
+          <div class="session-link-box">
+            <input type="text" id="sessionUrlDisplay" class="session-url-input" readonly>
+            <button id="copyUrlBtn" class="btn btn-secondary btn-sm" title="Copy URL to clipboard">
+              📋 Copy
+            </button>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">
+            Share this link via SMS or chat, or have the customer scan the QR code with their mobile phone camera.
+          </p>
+        </div>
+
+        <div class="qr-container">
+          <img id="qrCodeImage" class="qr-image" alt="Session QR Code">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Scan on Phone</span>
+        </div>
+      </section>
+
+      <!-- Main Operational Grid -->
+      <div class="operator-grid">
+        
+        <!-- Left: Live Feeds & Diagnostics -->
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+          
+          <!-- Live Media Viewport -->
+          <div class="card">
+            <div class="card-header">
+              <h2 class="card-title">
+                📹 Remote Media Stream
+              </h2>
+              <div style="display: flex; gap: 0.5rem;">
+                <button id="fullscreenBtn" class="btn btn-secondary btn-sm">⛶ Fullscreen</button>
+              </div>
+            </div>
+
+            <div class="media-viewport" id="mediaViewport">
+              <video id="remoteVideo" autoplay playsinline></video>
+              <div id="videoPlaceholder" class="media-placeholder">
+                <div class="media-placeholder-icon">📴</div>
+                <div><strong>No Active Video Stream</strong></div>
+                <div style="font-size: 0.85rem;">The recipient has not granted camera or screen sharing permissions yet.</div>
+              </div>
+            </div>
+
+            <!-- Audio Meter Visualizer -->
+            <div class="audio-visualizer-box">
+              <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
+                <span>🎙️ Remote Microphone Level</span>
+                <span id="audioLevelLabel">Inactive</span>
+              </div>
+              <div class="audio-bars" id="audioBarsContainer">
+                <!-- 16 audio bars for live equalizer -->
+              </div>
+            </div>
+          </div>
+
+          <!-- Geolocation Information Card -->
+          <div class="card" id="locationCard">
+            <div class="card-header">
+              <h3 class="card-title">📍 Customer Location</h3>
+              <span id="locationStatusTag" class="perm-status-tag tag-not-requested">Not Shared</span>
+            </div>
+            <div id="locationDetails" style="font-size: 0.9rem; color: var(--text-muted);">
+              Location coordinates have not been provided by the recipient.
+            </div>
+          </div>
+
+          <!-- Uploaded Diagnostic Files -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📁 Diagnostic Files & Screenshots</h3>
+              <span id="fileCountBadge" class="brand-badge">0 Files</span>
+            </div>
+            <div id="filesContainer" class="file-list">
+              <div style="font-size: 0.85rem; color: var(--text-muted); font-style: italic;">
+                No files uploaded by recipient.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Right: Permissions, Audit Log & Chat -->
+        <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+          
+          <!-- Recipient Permission Matrix -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">🔐 Permission Governance</h3>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+              Live capability states. You can send a respectful prompt to the customer requesting a specific capability.
+            </p>
+
+            <div class="permissions-grid" style="grid-template-columns: 1fr;">
+              <!-- Camera -->
+              <div class="perm-card">
+                <div class="perm-card-header">
+                  <span class="perm-card-title">📷 Camera</span>
+                  <span id="permTag_camera" class="perm-status-tag tag-not-requested">Not Requested</span>
+                </div>
+                <button class="btn btn-secondary btn-sm req-perm-btn" data-capability="camera">
+                  Ask Recipient for Camera
+                </button>
+              </div>
+
+              <!-- Microphone -->
+              <div class="perm-card">
+                <div class="perm-card-header">
+                  <span class="perm-card-title">🎙️ Microphone</span>
+                  <span id="permTag_microphone" class="perm-status-tag tag-not-requested">Not Requested</span>
+                </div>
+                <button class="btn btn-secondary btn-sm req-perm-btn" data-capability="microphone">
+                  Ask Recipient for Mic
+                </button>
+              </div>
+
+              <!-- Screen Share -->
+              <div class="perm-card">
+                <div class="perm-card-header">
+                  <span class="perm-card-title">🖥️ Screen Share</span>
+                  <span id="permTag_screen" class="perm-status-tag tag-not-requested">Not Requested</span>
+                </div>
+                <button class="btn btn-secondary btn-sm req-perm-btn" data-capability="screen">
+                  Ask Recipient for Screen
+                </button>
+              </div>
+
+              <!-- Geolocation -->
+              <div class="perm-card">
+                <div class="perm-card-header">
+                  <span class="perm-card-title">📍 Geolocation</span>
+                  <span id="permTag_geolocation" class="perm-status-tag tag-not-requested">Not Requested</span>
+                </div>
+                <button class="btn btn-secondary btn-sm req-perm-btn" data-capability="geolocation">
+                  Ask for Location
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Real-Time Audit Log Timeline -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">📜 Audit Trail (Non-PII)</h3>
+              <span class="brand-badge">Immutable</span>
+            </div>
+            <div id="auditLogList" class="audit-list">
+              <!-- Dynamically populated with audit events -->
+            </div>
+          </div>
+
+          <!-- Operator / Recipient Chat -->
+          <div class="card">
+            <div class="card-header">
+              <h3 class="card-title">💬 Live Session Guidance</h3>
+            </div>
+            <div id="chatHistory" style="height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.85rem; padding: 0.5rem; background: var(--bg-primary); border-radius: var(--radius-sm); border: 1px solid var(--border-color); margin-bottom: 0.5rem;">
+              <div style="color: var(--text-dim); font-style: italic;">Send diagnostic instructions or links directly to the customer's screen.</div>
+            </div>
+            <form id="chatForm" style="display: flex; gap: 0.5rem;">
+              <input type="text" id="chatInput" placeholder="Type instructions..." style="flex: 1; padding: 0.5rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-main); font-size: 0.85rem;">
+              <button type="submit" class="btn btn-primary btn-sm">Send</button>
+            </form>
+          </div>
+
+          <!-- Emergency Termination Button -->
+          <button id="mainEndBtn" class="btn btn-danger btn-block" style="padding: 1rem;">
+            🛑 Terminate Support Session Immediately
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script type="module" src="/js/operator.js"></script>
+</body>
+</html>

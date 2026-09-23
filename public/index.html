@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consent-Based Remote Support Platform</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <span class="brand-title">RemoteAssist Pro</span>
+          <span class="brand-badge">Privacy First</span>
+        </div>
+      </div>
+      <div>
+        <a href="/operator.html" class="btn btn-primary btn-sm">Launch Operator Console →</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container" style="max-width: 900px; margin: 2rem auto;">
+    
+    <div style="text-align: center; margin-bottom: 2.5rem;">
+      <span class="session-badge-pill" style="font-size: 0.85rem; padding: 0.35rem 1rem;">
+        🔒 Zero-Surprise Browser Architecture
+      </span>
+      <h1 style="font-size: 2.4rem; font-weight: 800; margin: 1rem 0 0.5rem; letter-spacing: -0.02em;">
+        Consent-Based Remote Support
+      </h1>
+      <p style="color: var(--text-muted); font-size: 1.1rem; max-width: 650px; margin: 0 auto;">
+        Production-quality remote diagnostics using modern, consent-gated Web APIs. No stealth access, no software installation, and no device takeover.
+      </p>
+      <div style="margin-top: 1.5rem; display: flex; justify-content: center; gap: 1rem;">
+        <a href="/operator.html" class="btn btn-primary" style="padding: 0.85rem 1.75rem; font-size: 1.05rem;">
+          Open Operator Dashboard
+        </a>
+      </div>
+    </div>
+
+    <!-- Core Security Pillars Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; margin-bottom: 2.5rem;">
+      
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📝</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem;">Explicit Consent Screen</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">
+          Recipients are presented with a transparent comparison of what may be requested vs. what will never be touched before any device APIs are called.
+        </p>
+      </div>
+
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">💡</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem;">Step-by-Step Explanation</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">
+          Every sensitive browser permission (camera, microphone, screen sharing, GPS) shows a dedicated explanation dialog before prompting the browser.
+        </p>
+      </div>
+
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">⚡</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem;">Instant Revocation</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">
+          The recipient can revoke individual permissions or end the session with one tap, immediately stopping all media hardware and invalidating session tokens.
+        </p>
+      </div>
+
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">👁️</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem;">Live Self-Preview</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">
+          A dedicated on-screen preview mirrors exactly what the operator is viewing, ensuring zero hidden or surprise data transmission.
+        </p>
+      </div>
+
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">🔐</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem;">Cryptographic Security</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">
+          Short-lived 256-bit cryptographic tokens separate operator governance from recipient invitations, with rate limiting and automated TTL expiration.
+        </p>
+      </div>
+
+      <div class="card">
+        <div style="font-size: 2rem; margin-bottom: 0.5rem;">📱</div>
+        <h3 style="font-size: 1.1rem; font-weight: 700; margin-bottom: 0.4rem;">Mobile-First Design</h3>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">
+          Built with responsive layouts, accessible touch targets, and automatic QR code generation for instant smartphone scanning.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Security Comparison Section -->
+    <div class="card" style="margin-bottom: 2rem;">
+      <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem;">Platform Trust & Privacy Commitments</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.85rem;">
+        <div style="background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); border-left: 4px solid var(--success);">
+          <strong style="color: var(--success); display: block; margin-bottom: 0.5rem;">Standard Supported Web APIs:</strong>
+          <div>✓ Live camera inspection via <code>getUserMedia()</code></div>
+          <div>✓ Voice guidance via <code>getUserMedia()</code></div>
+          <div>✓ Screen sharing via <code>getDisplayMedia()</code></div>
+          <div>✓ Geolocation via <code>getCurrentPosition()</code></div>
+          <div>✓ Diagnostic photo upload via standard <code>&lt;input type="file"&gt;</code></div>
+        </div>
+        <div style="background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); border-left: 4px solid var(--danger);">
+          <strong style="color: var(--danger); display: block; margin-bottom: 0.5rem;">Strictly Blocked / Non-Existent:</strong>
+          <div>✕ No access to Contacts, SMS, or Call Logs</div>
+          <div>✕ No access to Passwords, Keystrokes, or Credentials</div>
+          <div>✕ No Remote Control or OS-level manipulation</div>
+          <div>✕ No silent or hidden background tracking</div>
+          <div>✕ No automatic audio/video recording without separate consent</div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer style="text-align: center; padding: 2rem; color: var(--text-dim); font-size: 0.8rem; border-top: 1px solid var(--border-color);">
+    Consent-Based Remote Support Platform &bull; Built with Standard Web Technologies &amp; Strict Browser Sandboxing
+  </footer>
+
+</body>
+</html>

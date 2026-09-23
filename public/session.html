@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Customer Consent & Remote Support</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body style="background-color: var(--bg-primary);">
+
+  <!-- Mobile Header -->
+  <header class="app-header">
+    <div class="header-inner" style="justify-content: space-between;">
+      <div class="brand">
+        <div class="brand-icon">🛡️</div>
+        <div>
+          <span class="brand-title">RemoteAssist</span>
+          <span class="brand-badge">Secure Session</span>
+        </div>
+      </div>
+      <div id="sessionHeaderStatus" style="display: flex; align-items: center; gap: 0.5rem;">
+        <span id="recipientTimerBadge" class="timer-badge" style="font-size: 0.75rem;">--:--</span>
+        <button id="quickEndBtn" class="btn btn-danger btn-sm" style="display: none;">
+          End Session
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mobile-container">
+
+    <!-- Loading / Verification State -->
+    <div id="loadingState" style="text-align: center; padding: 3rem 1rem;">
+      <div class="pulse-dot" style="width: 16px; height: 16px; margin: 0 auto 1rem; color: var(--primary);"></div>
+      <h3 style="font-size: 1.1rem; font-weight: 600;">Verifying Support Session...</h3>
+      <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 0.5rem;">
+        Checking session validity and cryptographic tokens.
+      </p>
+    </div>
+
+    <!-- Error State (Invalid or Expired) -->
+    <div id="errorState" class="card termination-screen" style="display: none;">
+      <div class="termination-icon">⚠️</div>
+      <h2 style="font-size: 1.3rem; margin-bottom: 0.5rem;" id="errorTitle">Session Unavailable</h2>
+      <p id="errorMessage" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        This support session link is invalid or has expired.
+      </p>
+      <a href="/" class="btn btn-secondary btn-block">Return to Home</a>
+    </div>
+
+    <!-- =====================================================================
+         PHASE 1: PROMINENT CONSENT SCREEN
+         ===================================================================== -->
+    <section id="consentScreen" class="consent-card" style="display: none;">
+      <div class="consent-header">
+        <div class="session-badge-pill">
+          🔒 Verified Technician Request
+        </div>
+        <h1 style="font-size: 1.35rem; font-weight: 800; margin-bottom: 0.35rem;">
+          Remote Support Request
+        </h1>
+        <p style="font-size: 0.9rem; color: var(--text-muted);">
+          From <strong id="consentOperatorName" style="color: var(--text-main);">Support Specialist</strong>
+        </p>
+        <p style="font-size: 0.85rem; color: #38bdf8; margin-top: 0.25rem;" id="consentSessionPurpose">
+          Diagnostic Assistance
+        </p>
+      </div>
+
+      <!-- Expiration Note -->
+      <div style="background: rgba(37, 99, 235, 0.1); border: 1px solid rgba(37, 99, 235, 0.3); border-radius: var(--radius-md); padding: 0.65rem 0.85rem; margin-bottom: 1rem; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+        <span>⏳ Session Expiration:</span>
+        <strong id="consentExpiresText" style="color: #60a5fa;">30 Minutes</strong>
+      </div>
+
+      <!-- Transparent Comparison: What May Be Requested vs What Will NEVER Be Accessed -->
+      <div class="comparison-grid">
+        
+        <!-- Permitted Capabilities (Gated by prompt) -->
+        <div class="scope-box allowed">
+          <div class="scope-title" style="color: #34d399;">
+            <span>✓</span> What May Be Requested
+          </div>
+          <ul class="scope-list">
+            <li>
+              <span class="scope-icon-allow">📷</span>
+              <div><strong>Camera:</strong> To inspect device cables or error codes.</div>
+            </li>
+            <li>
+              <span class="scope-icon-allow">🎙️</span>
+              <div><strong>Microphone:</strong> For live voice communication.</div>
+            </li>
+            <li>
+              <span class="scope-icon-allow">🖥️</span>
+              <div><strong>Screen Sharing:</strong> To guide you through apps.</div>
+            </li>
+            <li>
+              <span class="scope-icon-allow">📍</span>
+              <div><strong>Location:</strong> To verify local service connectivity.</div>
+            </li>
+            <li>
+              <span class="scope-icon-allow">📁</span>
+              <div><strong>File Selection:</strong> Only files you deliberately pick.</div>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Strict Prohibitions & Protections -->
+        <div class="scope-box prohibited">
+          <div class="scope-title" style="color: #f87171;">
+            <span>✕</span> What Will NEVER Be Accessed
+          </div>
+          <ul class="scope-list">
+            <li>
+              <span class="scope-icon-deny">🚫</span>
+              <div><strong>Contacts & SMS:</strong> Never accessible.</div>
+            </li>
+            <li>
+              <span class="scope-icon-deny">🚫</span>
+              <div><strong>Passwords & Keys:</strong> Kept strictly private.</div>
+            </li>
+            <li>
+              <span class="scope-icon-deny">🚫</span>
+              <div><strong>Device Storage:</strong> No automatic file access.</div>
+            </li>
+            <li>
+              <span class="scope-icon-deny">🚫</span>
+              <div><strong>Other Apps:</strong> No access to banking or chats.</div>
+            </li>
+            <li>
+              <span class="scope-icon-deny">🚫</span>
+              <div><strong>Background Access:</strong> Halts when tab closes.</div>
+            </li>
+            <li>
+              <span class="scope-icon-deny">🚫</span>
+              <div><strong>Remote Control:</strong> The operator cannot control your phone.</div>
+            </li>
+          </ul>
+        </div>
+
+      </div>
+
+      <!-- Privacy & Recording Notice -->
+      <div class="privacy-notice">
+        <strong>Privacy Notice:</strong> This session connects peer-to-peer using standard browser security. 
+        <strong>No automatic recording is conducted.</strong> You will be shown a separate explanation prior to each permission, and you may revoke access or stop the session at any time.
+      </div>
+
+      <!-- Consent Actions -->
+      <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+        <button id="consentAllowBtn" class="btn btn-primary btn-block">
+          ✓ Allow & Continue to Support
+        </button>
+        <button id="consentDeclineBtn" class="btn btn-secondary btn-block">
+          ✕ Decline & Exit
+        </button>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         PHASE 2: ACTIVE SESSION INTERFACE (Granular Permissions & Previews)
+         ===================================================================== -->
+    <section id="activeSessionScreen" style="display: none;">
+      
+      <!-- Live Status Banner -->
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 0.85rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; justify-content: space-between;">
+        <div>
+          <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700;">Support Active</div>
+          <div style="font-size: 0.95rem; font-weight: 600;" id="activeOperatorName">Support Specialist</div>
+        </div>
+        <div class="status-pill active">
+          <span class="pulse-dot"></span>
+          <span>Live</span>
+        </div>
+      </div>
+
+      <!-- Self Preview: What the Technician Sees -->
+      <div id="selfPreviewWrapper" style="display: none;">
+        <div style="font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text-muted); display: flex; justify-content: space-between;">
+          <span>Live Transmission Preview (Technician View)</span>
+          <span style="color: var(--success);">Transmitting</span>
+        </div>
+        <div class="self-preview-container">
+          <video id="selfPreviewVideo" autoplay playsinline muted></video>
+          <div class="preview-live-badge">
+            <span class="pulse-dot"></span> LIVE TRANSMISSION
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Permission Cards -->
+      <div style="margin-bottom: 1.5rem;">
+        <h3 style="font-size: 1rem; font-weight: 700; margin-bottom: 0.75rem; color: var(--text-main);">
+          Session Capabilities
+        </h3>
+        
+        <!-- 1. Camera Card -->
+        <div class="recipient-control-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="font-weight: 600; display: flex; align-items: center; gap: 0.4rem;">
+              📷 Device Camera
+            </div>
+            <span id="recipientStatus_camera" class="perm-status-tag tag-not-requested">Off</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Share your rear camera to inspect equipment or cables with the technician.
+          </p>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="triggerCameraBtn" class="btn btn-primary btn-sm" style="flex: 1;">
+              Start Camera
+            </button>
+            <button id="revokeCameraBtn" class="btn btn-danger-outline btn-sm" style="display: none;">
+              Stop
+            </button>
+            <button id="flipCameraBtn" class="btn btn-secondary btn-sm" style="display: none;" title="Switch Front/Rear">
+              🔄 Flip
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Microphone Card -->
+        <div class="recipient-control-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="font-weight: 600; display: flex; align-items: center; gap: 0.4rem;">
+              🎙️ Voice Microphone
+            </div>
+            <span id="recipientStatus_microphone" class="perm-status-tag tag-not-requested">Off</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Enable voice communication so you can speak directly with the technician.
+          </p>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="triggerMicBtn" class="btn btn-primary btn-sm" style="flex: 1;">
+              Enable Microphone
+            </button>
+            <button id="revokeMicBtn" class="btn btn-danger-outline btn-sm" style="display: none;">
+              Mute / Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- 3. Screen Sharing Card -->
+        <div class="recipient-control-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="font-weight: 600; display: flex; align-items: center; gap: 0.4rem;">
+              🖥️ Screen Sharing
+            </div>
+            <span id="recipientStatus_screen" class="perm-status-tag tag-not-requested">Off</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Share your screen to demonstrate an issue. You choose exactly what window to share.
+          </p>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="triggerScreenBtn" class="btn btn-primary btn-sm" style="flex: 1;">
+              Share Screen
+            </button>
+            <button id="revokeScreenBtn" class="btn btn-danger-outline btn-sm" style="display: none;">
+              Stop Sharing
+            </button>
+          </div>
+          <div id="screenUnsupportedNotice" style="display: none; font-size: 0.75rem; color: var(--warning); margin-top: 0.5rem;">
+            ⚠️ Screen capture is not supported on this mobile browser. Please use Camera to inspect instead.
+          </div>
+        </div>
+
+        <!-- 4. Location Verification Card -->
+        <div class="recipient-control-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="font-weight: 600; display: flex; align-items: center; gap: 0.4rem;">
+              📍 Geolocation Verification
+            </div>
+            <span id="recipientStatus_geolocation" class="perm-status-tag tag-not-requested">Off</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Share your approximate location coordinates to assist with local network diagnostics.
+          </p>
+          <button id="triggerLocationBtn" class="btn btn-primary btn-sm btn-block">
+            Share Location (One-Time)
+          </button>
+        </div>
+
+        <!-- 5. Diagnostic File / Photo Selection -->
+        <div class="recipient-control-card">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <div style="font-weight: 600; display: flex; align-items: center; gap: 0.4rem;">
+              📁 Send Diagnostic Photo or File
+            </div>
+            <span class="brand-badge">Manual Pick Only</span>
+          </div>
+          <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.75rem;">
+            Explicitly select a photo or diagnostic log from your phone to send to the operator.
+          </p>
+          <input type="file" id="diagnosticFileInput" style="display: none;" accept="image/*,text/*,.log,.pdf">
+          <button id="triggerFileBtn" class="btn btn-secondary btn-sm btn-block">
+            📷 Select Photo / File to Send
+          </button>
+          <div id="fileUploadStatus" style="font-size: 0.8rem; color: var(--success); margin-top: 0.4rem; display: none;"></div>
+        </div>
+
+      </div>
+
+      <!-- Recipient Chat / Guidance Box -->
+      <div class="recipient-control-card" style="margin-bottom: 1.5rem;">
+        <div style="font-weight: 600; font-size: 0.9rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+          💬 Technician Guidance
+        </div>
+        <div id="recipientChatHistory" style="max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.4rem; font-size: 0.8rem; margin-bottom: 0.5rem;">
+          <div style="color: var(--text-dim); font-style: italic;">Technician instructions will appear here.</div>
+        </div>
+        <form id="recipientChatForm" style="display: flex; gap: 0.4rem;">
+          <input type="text" id="recipientChatInput" placeholder="Reply to technician..." style="flex: 1; padding: 0.45rem; background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-sm); color: var(--text-main); font-size: 0.8rem;">
+          <button type="submit" class="btn btn-primary btn-sm">Send</button>
+        </form>
+      </div>
+
+      <!-- Revocation & End Session Actions -->
+      <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; padding-bottom: 2rem;">
+        <button id="revokeAllBtn" class="btn btn-secondary btn-block">
+          🛡️ Revoke All Permissions Now
+        </button>
+        <button id="recipientEndBtn" class="btn btn-danger btn-block">
+          🛑 End Support Session
+        </button>
+      </div>
+
+    </section>
+
+    <!-- =====================================================================
+         PHASE 3: TERMINATION / EXIT SCREEN
+         ===================================================================== -->
+    <section id="terminationScreen" class="card termination-screen" style="display: none;">
+      <div class="termination-icon">🔒</div>
+      <h2 style="font-size: 1.4rem; margin-bottom: 0.5rem;">Support Session Terminated</h2>
+      <p id="terminationReasonText" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        The session has ended. All camera, microphone, and data streams have been permanently closed, and your temporary session tokens are invalidated.
+      </p>
+      <div style="background: var(--bg-primary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.85rem; font-size: 0.8rem; color: var(--text-muted); text-align: left; margin-bottom: 1.5rem;">
+        <div style="font-weight: 600; color: var(--text-main); margin-bottom: 0.35rem;">Security Confirmation:</div>
+        <div>✓ Browser media tracks stopped</div>
+        <div>✓ WebRTC peer connection destroyed</div>
+        <div>✓ Session authorization wiped</div>
+        <div>✓ Zero background processes remaining</div>
+      </div>
+      <p style="font-size: 0.8rem; color: var(--text-dim);">
+        You may now safely close this browser tab.
+      </p>
+    </section>
+
+    <!-- =====================================================================
+         PRE-PERMISSION EXPLANATION MODAL (Required before sensitive browser prompt)
+         ===================================================================== -->
+    <div id="permModal" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-icon" id="modalIcon">📷</div>
+        <h3 id="modalTitle" style="text-align: center; font-size: 1.15rem; margin-bottom: 0.5rem;">
+          Permission Explanation
+        </h3>
+        <p id="modalDescription" style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.75rem; text-align: center;">
+          Explanation of why this permission is requested.
+        </p>
+        <div id="modalNotice" style="background: rgba(30, 41, 59, 0.7); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 0.6rem; font-size: 0.8rem; color: var(--text-dim); margin-bottom: 1rem;">
+          You can revoke this permission at any moment using the in-app controls.
+        </div>
+        <div class="modal-actions">
+          <button id="modalConfirmBtn" class="btn btn-primary">
+            Proceed to Browser Prompt
+          </button>
+          <button id="modalCancelBtn" class="btn btn-secondary">
+            Skip / Decline
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script type="module" src="/js/recipient.js"></script>
+</body>
+</html>

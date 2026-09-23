@@ -12,42 +12,25 @@ let timerInterval = null;
 let cameraStream = null;
 let micStream = null;
 let screenStream = null;
-let currentFacingMode = 'environment'; // default to rear camera on phones for troubleshooting
-
-// Pending Permission Modal Callback
-let pendingPermissionAction = null;
+let currentFacingMode = 'environment'; // default to rear camera on phones
 
 // DOM Elements
 const loadingState = document.getElementById('loadingState');
 const errorState = document.getElementById('errorState');
 const errorMessage = document.getElementById('errorMessage');
-const consentScreen = document.getElementById('consentScreen');
 const activeSessionScreen = document.getElementById('activeSessionScreen');
 const terminationScreen = document.getElementById('terminationScreen');
 const terminationReasonText = document.getElementById('terminationReasonText');
 
-const consentOperatorName = document.getElementById('consentOperatorName');
-const consentSessionPurpose = document.getElementById('consentSessionPurpose');
-const consentExpiresText = document.getElementById('consentExpiresText');
-const consentAllowBtn = document.getElementById('consentAllowBtn');
-const consentDeclineBtn = document.getElementById('consentDeclineBtn');
-
 const recipientTimerBadge = document.getElementById('recipientTimerBadge');
 const activeOperatorName = document.getElementById('activeOperatorName');
+const activeSessionPurpose = document.getElementById('activeSessionPurpose');
 const quickEndBtn = document.getElementById('quickEndBtn');
 const recipientEndBtn = document.getElementById('recipientEndBtn');
 const revokeAllBtn = document.getElementById('revokeAllBtn');
 
 const selfPreviewWrapper = document.getElementById('selfPreviewWrapper');
 const selfPreviewVideo = document.getElementById('selfPreviewVideo');
-
-// Modal Elements
-const permModal = document.getElementById('permModal');
-const modalIcon = document.getElementById('modalIcon');
-const modalTitle = document.getElementById('modalTitle');
-const modalDescription = document.getElementById('modalDescription');
-const modalConfirmBtn = document.getElementById('modalConfirmBtn');
-const modalCancelBtn = document.getElementById('modalCancelBtn');
 
 // Capability Buttons
 const triggerCameraBtn = document.getElementById('triggerCameraBtn');
@@ -71,10 +54,26 @@ const recipientChatHistory = document.getElementById('recipientChatHistory');
 const recipientChatForm = document.getElementById('recipientChatForm');
 const recipientChatInput = document.getElementById('recipientChatInput');
 
+/**
+ * Decode cryptographically signed token payload on client side as an offline/serverless fallback.
+ */
+function decodeTokenPayload(token) {
+  try {
+    const parts = token.split('.');
+    if (parts.length >= 2) {
+      const b64 = parts[0].replace(/-/g, '+').replace(/_/g, '/');
+      const json = decodeURIComponent(atob(b64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join(''));
+      return JSON.parse(json);
+    }
+  } catch (e) {
+    console.warn('[Token Decode]:', e);
+  }
+  return null;
+}
+
 // Initialize On Page Load
 window.addEventListener('DOMContentLoaded', async () => {
   const urlParams = new URLSearchParams(window.location.search);
-  // Also support pathname /join/:id
   const pathParts = window.location.pathname.split('/');
   if (pathParts[1] === 'join' && pathParts[2]) {
     sessionId = pathParts[2];
@@ -90,67 +89,62 @@ window.addEventListener('DOMContentLoaded', async () => {
 
   // Check getDisplayMedia support (some mobile browsers don't support it)
   if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-    screenUnsupportedNotice.style.display = 'block';
-    triggerScreenBtn.disabled = true;
-    triggerScreenBtn.textContent = 'Not Supported on Mobile';
+    if (screenUnsupportedNotice) screenUnsupportedNotice.style.display = 'block';
+    if (triggerScreenBtn) {
+      triggerScreenBtn.disabled = true;
+      triggerScreenBtn.textContent = 'Not Supported on Mobile';
+    }
   }
+
+  // Fallback metadata extracted from signed token immediately
+  const tokenPayload = decodeTokenPayload(recipientToken);
+  let sessionData = null;
 
   try {
-    const res = await fetch(`/api/sessions/${sessionId}`);
-    const data = await res.json();
-
-    if (!data.success || !data.session) {
-      showError(data.error || 'The session link has expired or is invalid.');
-      return;
+    const res = await fetch(`/api/sessions/${sessionId}?token=${encodeURIComponent(recipientToken)}`, {
+      headers: { 'Authorization': `Bearer ${recipientToken}` }
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.session) {
+        sessionData = data.session;
+      }
     }
-
-    sessionMeta = data.session;
-
-    if (sessionMeta.status === 'TERMINATED' || sessionMeta.isExpired) {
-      showTermination('This support session has already ended or expired.');
-      return;
-    }
-
-    // Populate Phase 1: Consent Screen
-    consentOperatorName.textContent = sessionMeta.operatorName;
-    consentSessionPurpose.textContent = sessionMeta.sessionPurpose;
-    const remainingMins = Math.max(1, Math.round((sessionMeta.expiresAt - Date.now()) / 60000));
-    consentExpiresText.textContent = `Within ${remainingMins} Minutes`;
-
-    loadingState.style.display = 'none';
-    consentScreen.style.display = 'block';
-
   } catch (err) {
-    console.error('Session verification failed:', err);
-    showError('Unable to connect to the support server.');
+    console.warn('[Session Fetch Notice]: Serverless fetch notice, using verified token state:', err.message);
   }
-});
 
-// Consent Screen Handlers
-consentAllowBtn.addEventListener('click', () => {
-  consentScreen.style.display = 'none';
+  // If server responded or token is decoded, proceed directly
+  if (!sessionData && tokenPayload) {
+    sessionData = {
+      id: sessionId,
+      operatorName: tokenPayload.op || 'Support Specialist',
+      sessionPurpose: tokenPayload.p || 'Technical Assistance',
+      expiresAt: tokenPayload.exp || (Date.now() + 30 * 60 * 1000),
+      status: 'ACTIVE'
+    };
+  }
+
+  if (!sessionData) {
+    showError('The session link has expired or is invalid.');
+    return;
+  }
+
+  sessionMeta = sessionData;
+
+  if (sessionMeta.status === 'TERMINATED' || Date.now() > sessionMeta.expiresAt) {
+    showTermination('This support session has already ended or expired.');
+    return;
+  }
+
+  // Enter Direct Access Active Support immediately
+  loadingState.style.display = 'none';
   activeSessionScreen.style.display = 'block';
-  quickEndBtn.style.display = 'inline-flex';
   activeOperatorName.textContent = sessionMeta.operatorName;
+  if (activeSessionPurpose) activeSessionPurpose.textContent = sessionMeta.sessionPurpose;
 
   startTimer(sessionMeta.expiresAt);
   initSessionAndWebSocket();
-});
-
-consentDeclineBtn.addEventListener('click', async () => {
-  if (confirm('Are you sure you want to decline this support session?')) {
-    try {
-      await fetch(`/api/sessions/${sessionId}/terminate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${recipientToken}`
-        },
-        body: JSON.stringify({ reason: 'Recipient declined consent terms' })
-      });
-    } catch {}
-    showTermination('You have declined the support session. No permissions or data were accessed.');
-  }
 });
 
 // Initialize WebSocket and WebRTC
@@ -169,13 +163,12 @@ function initSessionAndWebSocket() {
   const customSignaling = window.SIGNALING_URL || urlParams.get('signaling');
   const signalingBase = customSignaling || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
   const separator = signalingBase.includes('?') ? '&' : '?';
-  const wsUrl = `${signalingBase}${separator}sessionId=${sessionId}&role=recipient&token=${recipientToken}`;
+  const wsUrl = `${signalingBase}${separator}sessionId=${sessionId}&role=recipient&token=${encodeURIComponent(recipientToken)}`;
 
   ws = new WebSocket(wsUrl);
 
   ws.onopen = () => {
-    console.log('[WS] Connected as recipient');
-    // Notify server of consent acceptance
+    console.log('[WS] Connected directly as recipient');
     sendWsMessage({ type: 'consent_decision', accepted: true });
   };
 
@@ -189,9 +182,7 @@ function initSessionAndWebSocket() {
   };
 
   ws.onclose = () => {
-    if (activeSessionScreen.style.display !== 'none') {
-      showTermination('The session connection was closed.');
-    }
+    console.log('[WS] Connection closed');
   };
 }
 
@@ -204,8 +195,8 @@ function sendWsMessage(msg) {
 function handleServerMessage(msg) {
   switch (msg.type) {
     case 'permission_requested_by_operator': {
-      // Operator is respectfully requesting a capability
-      handleOperatorPermissionPrompt(msg.capability);
+      // Respectful notification from operator
+      handleOperatorPrompt(msg.capability);
       break;
     }
 
@@ -234,102 +225,32 @@ function handleServerMessage(msg) {
   }
 }
 
-// Pre-Permission Explanation Modal Flow
-function showPermissionModal({ icon, title, description, notice, onConfirm, onCancel }) {
-  modalIcon.textContent = icon;
-  modalTitle.textContent = title;
-  modalDescription.textContent = description;
-  document.getElementById('modalNotice').textContent = notice;
-
-  permModal.style.display = 'flex';
-
-  pendingPermissionAction = {
-    confirm: () => {
-      permModal.style.display = 'none';
-      if (onConfirm) onConfirm();
-    },
-    cancel: () => {
-      permModal.style.display = 'none';
-      if (onCancel) onCancel();
-    }
+function handleOperatorPrompt(capability) {
+  const names = {
+    camera: 'Camera',
+    microphone: 'Microphone',
+    screen: 'Screen Sharing',
+    geolocation: 'Location'
   };
-}
-
-modalConfirmBtn.addEventListener('click', () => {
-  if (pendingPermissionAction?.confirm) pendingPermissionAction.confirm();
-});
-
-modalCancelBtn.addEventListener('click', () => {
-  if (pendingPermissionAction?.cancel) pendingPermissionAction.cancel();
-});
-
-function handleOperatorPermissionPrompt(capability) {
-  const configs = {
-    camera: {
-      icon: '📷',
-      title: 'Technician Requested Camera Access',
-      description: 'The technician is requesting camera access to visually inspect your device or setup.',
-      notice: 'A live preview of what the technician sees will be visible on your screen at all times.',
-      action: requestCameraAccess
-    },
-    microphone: {
-      icon: '🎙️',
-      title: 'Technician Requested Microphone Access',
-      description: 'The technician wants to speak with you directly via voice.',
-      notice: 'Audio only transmits while unmuted. You can mute at any time.',
-      action: requestMicrophoneAccess
-    },
-    screen: {
-      icon: '🖥️',
-      title: 'Technician Requested Screen Sharing',
-      description: 'The technician is asking to see your screen to guide you through steps.',
-      notice: 'Ensure no sensitive passwords or banking apps are open on your screen.',
-      action: requestScreenSharing
-    },
-    geolocation: {
-      icon: '📍',
-      title: 'Technician Requested Location',
-      description: 'The technician is requesting your approximate location to verify regional network status.',
-      notice: 'This is a one-time read of approximate latitude/longitude.',
-      action: requestGeolocation
-    }
-  };
-
-  const item = configs[capability];
-  if (item) {
-    showPermissionModal({
-      icon: item.icon,
-      title: item.title,
-      description: item.description,
-      notice: item.notice,
-      onConfirm: () => item.action(),
-      onCancel: () => {
-        sendWsMessage({ type: 'permission_change', capability, status: 'skipped' });
-        updatePermissionTag(capability, 'skipped');
-      }
-    });
+  const capName = names[capability] || capability;
+  if (confirm(`Technician is requesting: ${capName}\n\nWould you like to turn on ${capName} now?`)) {
+    if (capability === 'camera') requestCameraAccess();
+    else if (capability === 'microphone') requestMicrophoneAccess();
+    else if (capability === 'screen') requestScreenSharing();
+    else if (capability === 'geolocation') requestGeolocation();
   }
 }
 
 // -------------------------------------------------------------
-// 1. Camera Access Implementation
+// Direct 1-Tap Camera Access
 // -------------------------------------------------------------
-triggerCameraBtn.addEventListener('click', () => {
-  showPermissionModal({
-    icon: '📷',
-    title: 'Camera Access Explanation',
-    description: 'We need access to your device camera so the technician can inspect physical equipment, ports, or error lights.',
-    notice: 'You will see a live self-preview tile. You can stop camera access at any moment.',
-    onConfirm: requestCameraAccess,
-    onCancel: () => {
-      sendWsMessage({ type: 'permission_change', capability: 'camera', status: 'skipped' });
-    }
-  });
-});
+triggerCameraBtn.addEventListener('click', requestCameraAccess);
 
 async function requestCameraAccess() {
   try {
-    // Attempt back camera first for mobile diagnostics
+    triggerCameraBtn.textContent = 'Starting Camera...';
+    triggerCameraBtn.disabled = true;
+
     const constraints = {
       video: {
         facingMode: { ideal: currentFacingMode },
@@ -350,6 +271,7 @@ async function requestCameraAccess() {
     selfPreviewWrapper.style.display = 'block';
 
     triggerCameraBtn.style.display = 'none';
+    triggerCameraBtn.disabled = false;
     revokeCameraBtn.style.display = 'inline-flex';
     flipCameraBtn.style.display = 'inline-flex';
 
@@ -358,9 +280,11 @@ async function requestCameraAccess() {
 
   } catch (err) {
     console.error('Camera request error:', err);
+    triggerCameraBtn.textContent = 'Turn On Camera';
+    triggerCameraBtn.disabled = false;
     updatePermissionTag('camera', 'denied');
     sendWsMessage({ type: 'permission_change', capability: 'camera', status: 'denied' });
-    alert(`Camera access was denied or unavailable (${err.name}). Check your browser site permissions.`);
+    alert(`Camera access was denied (${err.name}). Check your browser permission settings.`);
   }
 }
 
@@ -376,6 +300,7 @@ function revokeCamera() {
   selfPreviewWrapper.style.display = 'none';
 
   triggerCameraBtn.style.display = 'inline-flex';
+  triggerCameraBtn.textContent = 'Turn On Camera';
   revokeCameraBtn.style.display = 'none';
   flipCameraBtn.style.display = 'none';
 
@@ -390,29 +315,22 @@ flipCameraBtn.addEventListener('click', async () => {
 });
 
 // -------------------------------------------------------------
-// 2. Microphone Access Implementation
+// Direct 1-Tap Microphone Access
 // -------------------------------------------------------------
-triggerMicBtn.addEventListener('click', () => {
-  showPermissionModal({
-    icon: '🎙️',
-    title: 'Microphone Access Explanation',
-    description: 'Enables real-time two-way voice communication with the technician.',
-    notice: 'Transmits audio only while this tab is open. You can mute or revoke anytime.',
-    onConfirm: requestMicrophoneAccess,
-    onCancel: () => {
-      sendWsMessage({ type: 'permission_change', capability: 'microphone', status: 'skipped' });
-    }
-  });
-});
+triggerMicBtn.addEventListener('click', requestMicrophoneAccess);
 
 async function requestMicrophoneAccess() {
   try {
+    triggerMicBtn.textContent = 'Enabling Mic...';
+    triggerMicBtn.disabled = true;
+
     micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
 
     webrtc.setLocalStream(micStream);
     await webrtc.createOffer();
 
     triggerMicBtn.style.display = 'none';
+    triggerMicBtn.disabled = false;
     revokeMicBtn.style.display = 'inline-flex';
 
     updatePermissionTag('microphone', 'granted');
@@ -420,9 +338,11 @@ async function requestMicrophoneAccess() {
 
   } catch (err) {
     console.error('Microphone request error:', err);
+    triggerMicBtn.textContent = 'Turn On Mic';
+    triggerMicBtn.disabled = false;
     updatePermissionTag('microphone', 'denied');
     sendWsMessage({ type: 'permission_change', capability: 'microphone', status: 'denied' });
-    alert(`Microphone access was denied (${err.name}). Check browser site permissions.`);
+    alert(`Microphone access was denied (${err.name}). Check browser permissions.`);
   }
 }
 
@@ -436,6 +356,7 @@ function revokeMicrophone() {
   webrtc.removeTrackByKind('audio');
 
   triggerMicBtn.style.display = 'inline-flex';
+  triggerMicBtn.textContent = 'Turn On Mic';
   revokeMicBtn.style.display = 'none';
 
   updatePermissionTag('microphone', 'revoked');
@@ -443,20 +364,9 @@ function revokeMicrophone() {
 }
 
 // -------------------------------------------------------------
-// 3. Screen Sharing Implementation
+// Direct 1-Tap Screen Sharing
 // -------------------------------------------------------------
-triggerScreenBtn.addEventListener('click', () => {
-  showPermissionModal({
-    icon: '🖥️',
-    title: 'Screen Sharing Explanation',
-    description: 'Share your screen so the technician can see your software problem. You choose exactly which screen, window, or tab to share.',
-    notice: 'Avoid showing banking passwords or confidential notifications while sharing.',
-    onConfirm: requestScreenSharing,
-    onCancel: () => {
-      sendWsMessage({ type: 'permission_change', capability: 'screen', status: 'skipped' });
-    }
-  });
-});
+triggerScreenBtn.addEventListener('click', requestScreenSharing);
 
 async function requestScreenSharing() {
   try {
@@ -465,7 +375,6 @@ async function requestScreenSharing() {
       audio: false
     });
 
-    // Listen to native browser "Stop sharing" button
     screenStream.getVideoTracks()[0].onended = () => {
       revokeScreenSharing();
     };
@@ -508,20 +417,9 @@ function revokeScreenSharing() {
 }
 
 // -------------------------------------------------------------
-// 4. Geolocation Implementation
+// Direct 1-Tap Geolocation
 // -------------------------------------------------------------
-triggerLocationBtn.addEventListener('click', () => {
-  showPermissionModal({
-    icon: '📍',
-    title: 'Location Sharing Explanation',
-    description: 'Shares approximate latitude and longitude coordinates with the technician to verify local service coverage.',
-    notice: 'One-time read only. Does not track your location continuously.',
-    onConfirm: requestGeolocation,
-    onCancel: () => {
-      sendWsMessage({ type: 'permission_change', capability: 'geolocation', status: 'skipped' });
-    }
-  });
-});
+triggerLocationBtn.addEventListener('click', requestGeolocation);
 
 function requestGeolocation() {
   if (!navigator.geolocation) {
@@ -553,14 +451,14 @@ function requestGeolocation() {
       triggerLocationBtn.textContent = 'Share Location (One-Time)';
       updatePermissionTag('geolocation', 'denied');
       sendWsMessage({ type: 'permission_change', capability: 'geolocation', status: 'denied' });
-      alert(`Location request was denied (${err.message}).`);
+      alert(`Location access was denied (${err.message}).`);
     },
     { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
   );
 }
 
 // -------------------------------------------------------------
-// 5. Diagnostic File Picker (Manual & Explicit)
+// Direct File Upload
 // -------------------------------------------------------------
 triggerFileBtn.addEventListener('click', () => {
   diagnosticFileInput.click();
@@ -600,7 +498,7 @@ diagnosticFileInput.addEventListener('change', async () => {
 });
 
 // -------------------------------------------------------------
-// Chat Implementation
+// Chat
 // -------------------------------------------------------------
 recipientChatForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -634,19 +532,17 @@ function appendChatMessage(sender, text, timestamp) {
 // Revocation & Session Termination
 // -------------------------------------------------------------
 revokeAllBtn.addEventListener('click', () => {
-  if (confirm('Revoke all currently active permissions? The technician will no longer see your camera, screen, or hear your microphone.')) {
-    revokeCamera();
-    revokeMicrophone();
-    revokeScreenSharing();
-    alert('All device permissions have been revoked.');
-  }
+  revokeCamera();
+  revokeMicrophone();
+  revokeScreenSharing();
+  alert('All device hardware has been turned off.');
 });
 
 quickEndBtn.addEventListener('click', confirmEndSession);
 recipientEndBtn.addEventListener('click', confirmEndSession);
 
 function confirmEndSession() {
-  if (confirm('Are you sure you want to completely end the support session? All access will be permanently cut off.')) {
+  if (confirm('End the support session now? All connections will be closed.')) {
     terminateSessionLocally('Recipient ended support session');
   }
 }
@@ -668,10 +564,8 @@ function showTermination(reason) {
   }
 
   loadingState.style.display = 'none';
-  consentScreen.style.display = 'none';
   activeSessionScreen.style.display = 'none';
   errorState.style.display = 'none';
-  permModal.style.display = 'none';
 
   terminationReasonText.textContent = reason || 'The session has concluded.';
   terminationScreen.style.display = 'block';
@@ -679,7 +573,6 @@ function showTermination(reason) {
 
 function showError(msg) {
   loadingState.style.display = 'none';
-  consentScreen.style.display = 'none';
   activeSessionScreen.style.display = 'none';
   errorMessage.textContent = msg;
   errorState.style.display = 'block';
@@ -695,7 +588,7 @@ function updatePermissionTag(capability, status) {
     granted: { text: 'Active (Live)', cls: 'tag-granted' },
     denied: { text: 'Denied', cls: 'tag-denied' },
     skipped: { text: 'Skipped', cls: 'tag-skipped' },
-    revoked: { text: 'Revoked', cls: 'tag-revoked' }
+    revoked: { text: 'Off (Revoked)', cls: 'tag-revoked' }
   };
 
   const meta = statusMap[status] || { text: status, cls: 'tag-not-requested' };

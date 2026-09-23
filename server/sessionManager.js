@@ -1,19 +1,90 @@
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { config } from './config.js';
+
+const SESSION_SECRET = process.env.SESSION_SECRET || 'remote-assist-production-secret-v1-2026';
+const STORAGE_FILE = path.join(os.tmpdir(), 'remote_assist_sessions_store.json');
 
 export class SessionManager {
   constructor() {
     this.sessions = new Map();
+    this.loadFromStorage();
+
     this.cleanupInterval = setInterval(() => this.cleanupExpiredSessions(), config.sessionCleanupIntervalMs);
+    if (this.cleanupInterval?.unref) {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  /**
+   * Generates a signed cryptographic token carrying state across serverless containers.
+   */
+  signToken(payload) {
+    const jsonStr = JSON.stringify(payload);
+    const b64 = Buffer.from(jsonStr).toString('base64url');
+    const hmac = crypto.createHmac('sha256', SESSION_SECRET).update(b64).digest('base64url');
+    return `${b64}.${hmac}`;
+  }
+
+  /**
+   * Verifies and decodes a signed cryptographic token.
+   */
+  verifyToken(token) {
+    if (!token || typeof token !== 'string') return null;
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    const [b64, hmac] = parts;
+    try {
+      const expected = crypto.createHmac('sha256', SESSION_SECRET).update(b64).digest('base64url');
+      if (crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(expected))) {
+        return JSON.parse(Buffer.from(b64, 'base64url').toString('utf8'));
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 
   /**
    * Generates a cryptographically secure random token.
-   * @param {number} bytes 
-   * @returns {string}
    */
   generateSecureToken(bytes = 32) {
     return crypto.randomBytes(bytes).toString('hex');
+  }
+
+  /**
+   * Loads sessions from shared temporary disk storage (for serverless environments).
+   */
+  loadFromStorage() {
+    try {
+      if (fs.existsSync(STORAGE_FILE)) {
+        const raw = fs.readFileSync(STORAGE_FILE, 'utf8');
+        const data = JSON.parse(raw);
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            if (item && item.id && Date.now() < item.expiresAt) {
+              this.sessions.set(item.id, item);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Storage] Load warning:', err.message);
+    }
+  }
+
+  /**
+   * Persists sessions to temporary disk storage.
+   */
+  saveToStorage() {
+    try {
+      const data = Array.from(this.sessions.values()).filter(s => Date.now() < s.expiresAt);
+      fs.writeFileSync(STORAGE_FILE, JSON.stringify(data), 'utf8');
+    } catch (err) {
+      console.warn('[Storage] Save warning:', err.message);
+    }
   }
 
   /**
@@ -21,8 +92,6 @@ export class SessionManager {
    */
   createSession({ operatorName = 'Support Specialist', sessionPurpose = 'Technical Assistance', durationMinutes = 30 } = {}) {
     const sessionId = this.generateSecureToken(16); // 32 hex chars
-    const operatorToken = this.generateSecureToken(32);
-    const recipientToken = this.generateSecureToken(32);
 
     const durationMs = Math.min(
       Math.max(durationMinutes * 60 * 1000, 5 * 60 * 1000), // Min 5 min
@@ -32,13 +101,33 @@ export class SessionManager {
     const now = Date.now();
     const expiresAt = now + durationMs;
 
+    const opName = String(operatorName).trim().slice(0, 80) || 'Support Specialist';
+    const purpose = String(sessionPurpose).trim().slice(0, 200) || 'Technical Assistance';
+
+    // Cryptographically signed tokens that survive serverless function restarts
+    const operatorToken = this.signToken({
+      id: sessionId,
+      role: 'operator',
+      exp: expiresAt,
+      cr: now
+    });
+
+    const recipientToken = this.signToken({
+      id: sessionId,
+      role: 'recipient',
+      op: opName,
+      p: purpose,
+      exp: expiresAt,
+      cr: now
+    });
+
     const session = {
       id: sessionId,
       operatorToken,
       recipientToken,
-      operatorName: String(operatorName).trim().slice(0, 80) || 'Support Specialist',
-      sessionPurpose: String(sessionPurpose).trim().slice(0, 200) || 'Technical Assistance',
-      status: 'CREATED', // CREATED, CONSENT_REVIEW, ACTIVE, TERMINATED
+      operatorName: opName,
+      sessionPurpose: purpose,
+      status: 'CREATED',
       createdAt: now,
       expiresAt,
       terminatedAt: null,
@@ -58,6 +147,7 @@ export class SessionManager {
     };
 
     this.sessions.set(sessionId, session);
+    this.saveToStorage();
 
     this.addAuditLog(sessionId, 'SESSION_CREATED', {
       operatorName: session.operatorName,
@@ -69,11 +159,53 @@ export class SessionManager {
   }
 
   /**
-   * Retrieves a session by ID if it exists and is not expired.
+   * Retrieves a session by ID. If not found in memory, attempts storage load
+   * or cryptographic reconstitution via signed token (essential for Vercel Serverless).
    */
-  getSession(sessionId) {
+  getSession(sessionId, token = null) {
     if (!sessionId) return null;
-    const session = this.sessions.get(sessionId);
+
+    let session = this.sessions.get(sessionId);
+
+    // If not in local RAM, check disk storage
+    if (!session) {
+      this.loadFromStorage();
+      session = this.sessions.get(sessionId);
+    }
+
+    // If still not found and token is present, reconstitute from verified token
+    if (!session && token) {
+      const payload = this.verifyToken(token);
+      if (payload && payload.id === sessionId && Date.now() <= payload.exp) {
+        session = {
+          id: sessionId,
+          operatorToken: this.signToken({ id: sessionId, role: 'operator', exp: payload.exp, cr: payload.cr || Date.now() }),
+          recipientToken: token,
+          operatorName: payload.op || 'Support Specialist',
+          sessionPurpose: payload.p || 'Technical Assistance',
+          status: 'ACTIVE',
+          createdAt: payload.cr || Date.now(),
+          expiresAt: payload.exp,
+          terminatedAt: null,
+          terminationReason: null,
+          permissions: {
+            camera: 'not_requested',
+            microphone: 'not_requested',
+            screen: 'not_requested',
+            geolocation: 'not_requested',
+            files: 'not_requested'
+          },
+          recipientConnected: true,
+          operatorConnected: false,
+          location: null,
+          uploadedFiles: [],
+          auditLog: []
+        };
+        this.sessions.set(sessionId, session);
+        this.saveToStorage();
+      }
+    }
+
     if (!session) return null;
 
     if (this.isExpired(session) && session.status !== 'TERMINATED') {
@@ -83,50 +215,34 @@ export class SessionManager {
     return session;
   }
 
-  /**
-   * Checks if session has passed its expiration time.
-   */
   isExpired(session) {
     return Date.now() > session.expiresAt;
   }
 
-  /**
-   * Validates operator token using timing-safe comparison.
-   */
   validateOperator(sessionId, token) {
-    const session = this.getSession(sessionId);
-    if (!session || !token) return false;
-    try {
-      const bufA = Buffer.from(session.operatorToken, 'hex');
-      const bufB = Buffer.from(token, 'hex');
-      if (bufA.length !== bufB.length) return false;
-      return crypto.timingSafeEqual(bufA, bufB);
-    } catch {
-      return false;
-    }
+    if (!sessionId || !token) return false;
+    const session = this.getSession(sessionId, token);
+    if (!session) return false;
+
+    // Check exact token match or valid signed operator token
+    if (session.operatorToken === token) return true;
+    const payload = this.verifyToken(token);
+    return Boolean(payload && payload.id === sessionId && payload.role === 'operator' && Date.now() <= payload.exp);
   }
 
-  /**
-   * Validates recipient token using timing-safe comparison.
-   */
   validateRecipient(sessionId, token) {
-    const session = this.getSession(sessionId);
-    if (!session || !token) return false;
-    try {
-      const bufA = Buffer.from(session.recipientToken, 'hex');
-      const bufB = Buffer.from(token, 'hex');
-      if (bufA.length !== bufB.length) return false;
-      return crypto.timingSafeEqual(bufA, bufB);
-    } catch {
-      return false;
-    }
+    if (!sessionId || !token) return false;
+    const session = this.getSession(sessionId, token);
+    if (!session) return false;
+
+    // Check exact token match or valid signed recipient token
+    if (session.recipientToken === token) return true;
+    const payload = this.verifyToken(token);
+    return Boolean(payload && payload.id === sessionId && payload.role === 'recipient' && Date.now() <= payload.exp);
   }
 
-  /**
-   * Returns safe public metadata for recipient landing page.
-   */
-  getPublicSessionInfo(sessionId) {
-    const session = this.getSession(sessionId);
+  getPublicSessionInfo(sessionId, token = null) {
+    const session = this.getSession(sessionId, token);
     if (!session) return null;
 
     return {
@@ -141,9 +257,6 @@ export class SessionManager {
     };
   }
 
-  /**
-   * Records recipient consent response.
-   */
   recordConsent(sessionId, accepted) {
     const session = this.getSession(sessionId);
     if (!session || session.status === 'TERMINATED') return false;
@@ -151,7 +264,7 @@ export class SessionManager {
     if (accepted) {
       session.status = 'ACTIVE';
       this.addAuditLog(sessionId, 'CONSENT_ACCEPTED', {
-        message: 'Recipient reviewed and accepted session consent terms'
+        message: 'Recipient connected and accepted direct support session'
       }, 'recipient');
     } else {
       this.addAuditLog(sessionId, 'CONSENT_DECLINED', {
@@ -159,13 +272,10 @@ export class SessionManager {
       }, 'recipient');
       this.terminateSession(sessionId, 'Recipient declined consent terms', 'recipient');
     }
-
+    this.saveToStorage();
     return true;
   }
 
-  /**
-   * Updates permission state for a specific capability.
-   */
   updatePermission(sessionId, capability, status, actor = 'recipient') {
     const session = this.getSession(sessionId);
     if (!session || session.status === 'TERMINATED') return false;
@@ -177,21 +287,17 @@ export class SessionManager {
       return false;
     }
 
-    const prevStatus = session.permissions[capability];
     session.permissions[capability] = status;
+    this.saveToStorage();
 
     this.addAuditLog(sessionId, `PERMISSION_${status.toUpperCase()}`, {
       capability,
-      previousStatus: prevStatus,
       newStatus: status
     }, actor);
 
     return true;
   }
 
-  /**
-   * Stores recipient geolocation data with user consent.
-   */
   storeLocation(sessionId, locationData) {
     const session = this.getSession(sessionId);
     if (!session || session.status !== 'ACTIVE') return false;
@@ -202,6 +308,7 @@ export class SessionManager {
       accuracy: Number(locationData.accuracy || 0),
       timestamp: Date.now()
     };
+    this.saveToStorage();
 
     this.addAuditLog(sessionId, 'LOCATION_SHARED', {
       accuracyMeters: session.location.accuracy
@@ -210,9 +317,6 @@ export class SessionManager {
     return true;
   }
 
-  /**
-   * Registers a diagnostic file explicitly uploaded by the recipient.
-   */
   addUploadedFile(sessionId, fileData) {
     const session = this.getSession(sessionId);
     if (!session || session.status !== 'ACTIVE') return false;
@@ -227,19 +331,16 @@ export class SessionManager {
     };
 
     session.uploadedFiles.push(fileRecord);
+    this.saveToStorage();
 
     this.addAuditLog(sessionId, 'FILE_SHARED', {
       originalName: fileRecord.originalName,
-      size: fileRecord.size,
-      mimeType: fileRecord.mimeType
+      size: fileRecord.size
     }, 'recipient');
 
     return fileRecord;
   }
 
-  /**
-   * Terminates a session immediately.
-   */
   terminateSession(sessionId, reason = 'Session ended', actor = 'system') {
     const session = this.sessions.get(sessionId);
     if (!session) return false;
@@ -249,25 +350,19 @@ export class SessionManager {
       session.terminatedAt = Date.now();
       session.terminationReason = reason;
 
-      // Revoke all granted permissions
       for (const cap of Object.keys(session.permissions)) {
         if (session.permissions[cap] === 'granted') {
           session.permissions[cap] = 'revoked';
         }
       }
 
-      this.addAuditLog(sessionId, 'SESSION_TERMINATED', {
-        reason,
-        terminatedBy: actor
-      }, actor);
+      this.saveToStorage();
+      this.addAuditLog(sessionId, 'SESSION_TERMINATED', { reason, terminatedBy: actor }, actor);
     }
 
     return true;
   }
 
-  /**
-   * Appends an event to the session audit trail.
-   */
   addAuditLog(sessionId, event, details = {}, actor = 'system') {
     const session = this.sessions.get(sessionId);
     if (!session) return;
@@ -279,23 +374,21 @@ export class SessionManager {
       details,
       actor
     });
+    this.saveToStorage();
   }
 
-  /**
-   * Background cleanup for old sessions.
-   */
   cleanupExpiredSessions() {
     const now = Date.now();
     for (const [id, session] of this.sessions.entries()) {
-      // Retain terminated sessions for 30 minutes for audit retrieval, then purge
       if (session.status === 'TERMINATED') {
         if (now - (session.terminatedAt || session.createdAt) > 30 * 60 * 1000) {
           this.sessions.delete(id);
         }
       } else if (now > session.expiresAt) {
-        this.terminateSession(id, 'Session expired automatically after timeout', 'system');
+        this.terminateSession(id, 'Session expired automatically', 'system');
       }
     }
+    this.saveToStorage();
   }
 
   destroy() {

@@ -118,7 +118,8 @@ apiRouter.post('/sessions', async (req, res) => {
  */
 apiRouter.get('/sessions/:id', (req, res) => {
   const { id } = req.params;
-  const sessionInfo = sessionManager.getPublicSessionInfo(id);
+  const token = req.query.token || extractToken(req);
+  const sessionInfo = sessionManager.getPublicSessionInfo(id, token);
 
   if (!sessionInfo) {
     return res.status(404).json({ success: false, error: 'Session not found or expired' });

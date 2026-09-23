@@ -1,0 +1,30 @@
+{
+  "name": "consent-remote-support",
+  "version": "1.0.0",
+  "description": "Production-quality, consent-based remote support web application using standard browser APIs",
+  "main": "server/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.js",
+    "start:https": "node server/index.js --https",
+    "test": "node tests/session.test.js"
+  },
+  "keywords": [
+    "remote-support",
+    "webrtc",
+    "privacy",
+    "consent",
+    "permissions"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "multer": "^1.4.5-lts.1",
+    "qrcode": "^1.5.4",
+    "selfsigned": "^2.4.1",
+    "ws": "^8.18.0"
+  }
+}

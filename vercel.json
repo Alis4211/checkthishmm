@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index.js" },
+    { "source": "/join/(.*)", "destination": "/session.html" },
+    { "source": "/operator", "destination": "/operator.html" }
+  ]
+}

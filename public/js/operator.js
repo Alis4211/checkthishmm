@@ -63,10 +63,15 @@ createSessionForm.addEventListener('submit', async (e) => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ operatorName, sessionPurpose, durationMinutes })
     });
-    const data = await res.json();
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      throw new Error(`Server returned HTTP ${res.status}`);
+    }
 
-    if (!data.success) {
-      alert(`Error creating session: ${data.error}`);
+    if (!res.ok || !data.success) {
+      alert(`Error creating session (${res.status}): ${data?.error || 'Server error'}`);
       return;
     }
 
@@ -74,7 +79,7 @@ createSessionForm.addEventListener('submit', async (e) => {
     startSessionSessionUI();
   } catch (err) {
     console.error('Session creation failed:', err);
-    alert('Failed to connect to the server to create session.');
+    alert(`Failed to connect to server: ${err.message}`);
   }
 });
 

@@ -59,8 +59,9 @@ export function createApp() {
   // Apply general limiter to rest of API
   app.use('/api', generalApiLimiter);
 
-  // Mount API router
+  // Mount API router (both with and without /api prefix for Vercel serverless compatibility)
   app.use('/api', apiRouter);
+  app.use('/', apiRouter);
 
   // Serve static assets from public directory
   app.use(express.static(config.publicDir));

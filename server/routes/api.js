@@ -9,8 +9,12 @@ import { config } from '../config.js';
 export const apiRouter = express.Router();
 
 // Ensure upload directory exists
-if (!fs.existsSync(config.uploadsDir)) {
-  fs.mkdirSync(config.uploadsDir, { recursive: true });
+try {
+  if (!fs.existsSync(config.uploadsDir)) {
+    fs.mkdirSync(config.uploadsDir, { recursive: true });
+  }
+} catch (err) {
+  console.warn('[Storage] Temporary upload dir initialization notice:', err.message);
 }
 
 // Multer storage for diagnostic uploads
@@ -72,7 +76,7 @@ apiRouter.post('/sessions', async (req, res) => {
       durationMinutes: parseInt(durationMinutes, 10) || 30
     });
 
-    const protocol = req.protocol || 'http';
+    const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'https';
     const host = req.get('host') || `localhost:${config.port}`;
     const baseUrl = `${protocol}://${host}`;
     const recipientUrl = `${baseUrl}/session.html?id=${session.id}&token=${session.recipientToken}`;
